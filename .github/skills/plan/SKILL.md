@@ -9,7 +9,7 @@ description: Generates a plan for work. Use when user requests a plan document g
  
 1. If user requests a new plan, and plan.md (root of project) already exists move it to .archives with a timestamp.
 
-2. Create path.md (root of project) and populate it by analyzing user's request and project context to generate a detailed plan for work to be done. Contents may include, but are not limited to:
+2. Create plan.md (root of project) and populate it by analyzing user's request and project context to generate a detailed plan for work to be done. Contents may include, but are not limited to:
 
    - Overview of the plan
    - Steps to be taken
