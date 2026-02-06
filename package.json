@@ -1,0 +1,15 @@
+{
+  "name": "toy-rag",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Toy RAG CLI ingest surface",
+  "bin": {
+    "notesrag": "./bin/notesrag.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=24.13.0"
+  }
+}
