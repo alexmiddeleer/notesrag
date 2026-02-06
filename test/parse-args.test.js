@@ -2,6 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { parseArgs } = require('../src/parseArgs');
 
+function assertParseError(args, pattern) {
+  assert.throws(() => parseArgs(args), pattern);
+}
+
 test('parseArgs accepts --source', () => {
   const parsed = parseArgs(['index', '--source', 'notes.txt']);
   assert.equal(parsed.inputMode, 'source');
@@ -14,22 +18,13 @@ test('parseArgs accepts --stdin', () => {
 });
 
 test('parseArgs rejects multiple sources', () => {
-  assert.throws(
-    () => parseArgs(['index', '--stdin', '--source', 'notes.txt']),
-    /exactly one input source/
-  );
+  assertParseError(['index', '--stdin', '--source', 'notes.txt'], /exactly one input source/);
 });
 
 test('parseArgs rejects missing source value', () => {
-  assert.throws(
-    () => parseArgs(['index', '--source']),
-    /missing value/
-  );
+  assertParseError(['index', '--source'], /missing value/);
 });
 
 test('parseArgs rejects missing mode', () => {
-  assert.throws(
-    () => parseArgs(['index']),
-    /missing input source/
-  );
+  assertParseError(['index'], /missing input source/);
 });

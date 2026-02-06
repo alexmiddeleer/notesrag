@@ -3,6 +3,24 @@ const { CliError } = require('./errors');
 
 const MAX_CHARS = 10000;
 
+function assertRequestObject(request) {
+  if (!request || typeof request !== 'object') {
+    throw new CliError('invalid ingest request');
+  }
+}
+
+function assertString(value, message) {
+  if (typeof value !== 'string') {
+    throw new CliError(message);
+  }
+}
+
+function assertSourceDescriptor(value) {
+  if (!value || typeof value !== 'object') {
+    throw new CliError('source descriptor is required');
+  }
+}
+
 function normalizeText(rawText) {
   const unixLines = rawText.replace(/\r\n?/g, '\n');
   return unixLines.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
@@ -18,19 +36,12 @@ function buildDocId(sourceDescriptor, text) {
 }
 
 function ingest(request) {
-  if (!request || typeof request !== 'object') {
-    throw new CliError('invalid ingest request');
-  }
+  assertRequestObject(request);
 
   const { rawText, sourceDescriptor, metadata = {} } = request;
 
-  if (typeof rawText !== 'string') {
-    throw new CliError('raw text is required');
-  }
-
-  if (!sourceDescriptor || typeof sourceDescriptor !== 'object') {
-    throw new CliError('source descriptor is required');
-  }
+  assertString(rawText, 'raw text is required');
+  assertSourceDescriptor(sourceDescriptor);
 
   const text = normalizeText(rawText);
   if (text.trim().length === 0) {

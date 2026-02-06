@@ -15,6 +15,21 @@ function hasBinarySignature(buffer) {
   return buffer.includes(0);
 }
 
+function buildTextPayload({ data, sourceDescriptor, decodeLabel, emptyMessage, binaryMessage }) {
+  if (data.length === 0) {
+    throw new CliError(emptyMessage);
+  }
+
+  if (hasBinarySignature(data)) {
+    throw new CliError(binaryMessage);
+  }
+
+  return {
+    rawText: decodeUtf8(data, decodeLabel),
+    sourceDescriptor,
+  };
+}
+
 async function readFromFile(sourcePath, cwd) {
   const resolvedPath = path.resolve(cwd, sourcePath);
 
@@ -28,21 +43,16 @@ async function readFromFile(sourcePath, cwd) {
     throw new CliError(`failed to read file: ${sourcePath}`);
   }
 
-  if (data.length === 0) {
-    throw new CliError('input file is empty');
-  }
-
-  if (hasBinarySignature(data)) {
-    throw new CliError('input file appears binary; expected plain text');
-  }
-
-  return {
-    rawText: decodeUtf8(data, 'input file'),
+  return buildTextPayload({
+    data,
     sourceDescriptor: {
       type: 'file',
       value: resolvedPath,
     },
-  };
+    decodeLabel: 'input file',
+    emptyMessage: 'input file is empty',
+    binaryMessage: 'input file appears binary; expected plain text',
+  });
 }
 
 async function readAll(stream) {
@@ -60,21 +70,16 @@ async function readFromStdin(stdin) {
 
   const data = await readAll(stdin);
 
-  if (data.length === 0) {
-    throw new CliError('stdin input is empty');
-  }
-
-  if (hasBinarySignature(data)) {
-    throw new CliError('stdin appears binary; expected plain text');
-  }
-
-  return {
-    rawText: decodeUtf8(data, 'stdin input'),
+  return buildTextPayload({
+    data,
     sourceDescriptor: {
       type: 'stdin',
       value: 'stdin',
     },
-  };
+    decodeLabel: 'stdin input',
+    emptyMessage: 'stdin input is empty',
+    binaryMessage: 'stdin appears binary; expected plain text',
+  });
 }
 
 module.exports = {

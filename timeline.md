@@ -2,12 +2,12 @@
 
 ## Phase 0 — Framing & Constraints (½ day)
 - Lock constraints:
-  - Offline-only, stdin/stdout/stderr
+  - (DONE) Offline-only, stdin/stdout/stderr
   - Single executable + SQLite DB + embedding model file
-- Define the black-box contract:
-  - `add_note(markdown)`
+- (DONE) Define the black-box contract:
+  - `add_note(any text)`
   - `query(text) -> ranked chunks + metadata`
-- Decide target platforms (e.g., macOS/Linux first)
+- (DONE) Decide target platforms (e.g., macOS/Linux first)
 
 Deliverable:
 - One-page design note with invariants and CLI contract

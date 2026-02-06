@@ -1,19 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
-const os = require('node:os');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 const { readFromFile, readFromStdin } = require('../src/adapters');
-
-async function withTempDir(fn) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'toy-rag-test-'));
-  try {
-    await fn(dir);
-  } finally {
-    await fs.rm(dir, { recursive: true, force: true });
-  }
-}
+const { withTempDir } = require('./helpers/tmp');
 
 test('readFromFile reads UTF-8 text', async () => {
   await withTempDir(async (dir) => {

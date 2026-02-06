@@ -13,8 +13,12 @@ function usage() {
   ].join('\n');
 }
 
+function isHelpFlag(token) {
+  return token === '--help' || token === '-h';
+}
+
 function parseArgs(argv) {
-  if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') {
+  if (argv.length === 0 || isHelpFlag(argv[0])) {
     return { help: true };
   }
 
@@ -29,7 +33,7 @@ function parseArgs(argv) {
   for (let i = 0; i < rest.length; i += 1) {
     const token = rest[i];
 
-    if (token === '--help' || token === '-h') {
+    if (isHelpFlag(token)) {
       return { help: true };
     }
 

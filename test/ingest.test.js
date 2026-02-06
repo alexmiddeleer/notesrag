@@ -2,6 +2,12 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { ingest, MAX_CHARS, normalizeText } = require('../src/ingest');
 
+const stdinDescriptor = { type: 'stdin', value: 'stdin' };
+
+function assertIngestError(payload, pattern) {
+  assert.throws(() => ingest(payload), pattern);
+}
+
 test('normalizeText converts CRLF and strips dangerous control chars', () => {
   const value = normalizeText('a\r\nb\u0001c');
   assert.equal(value, 'a\nbc');
@@ -19,16 +25,13 @@ test('ingest returns stable shape with generated document id', () => {
 });
 
 test('ingest rejects empty text after normalization', () => {
-  assert.throws(
-    () => ingest({ rawText: '\u0001\u0002', sourceDescriptor: { type: 'stdin', value: 'stdin' } }),
+  assertIngestError(
+    { rawText: '\u0001\u0002', sourceDescriptor: stdinDescriptor },
     /empty after normalization/
   );
 });
 
 test('ingest rejects oversized text', () => {
   const payload = 'x'.repeat(MAX_CHARS + 1);
-  assert.throws(
-    () => ingest({ rawText: payload, sourceDescriptor: { type: 'stdin', value: 'stdin' } }),
-    /exceeds max size/
-  );
+  assertIngestError({ rawText: payload, sourceDescriptor: stdinDescriptor }, /exceeds max size/);
 });

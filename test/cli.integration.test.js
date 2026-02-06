@@ -1,19 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
-const os = require('node:os');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 const { main } = require('../src/cli');
-
-async function withTempDir(fn) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'toy-rag-cli-'));
-  try {
-    await fn(dir);
-  } finally {
-    await fs.rm(dir, { recursive: true, force: true });
-  }
-}
+const { withTempDir } = require('./helpers/tmp');
 
 function ioFor({ cwd, stdinChunks = [], isTTY = false } = {}) {
   const stdin = Readable.from(stdinChunks);

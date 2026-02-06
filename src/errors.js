@@ -6,6 +6,11 @@ class CliError extends Error {
   }
 }
 
+function isCliError(error) {
+  return error instanceof CliError;
+}
+
 module.exports = {
   CliError,
+  isCliError,
 };

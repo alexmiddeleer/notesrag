@@ -1,93 +1,103 @@
-# Plan: Flowchart Step A-B (User/Shell/Editor -> index CLI)
+# Plan: Next Indexing Phase (Source Persistence via better-sqlite3)
 
 ## Overview
-Implement the ingest entrypoint that lets a user provide plain text data from shell/editor workflows and reliably hand it off to an `index` CLI command. Scope is strictly the A-B edge in `README.md`: input acquisition, command surface, validation, and handoff contract to downstream indexing pipeline.
-The CLI program for this plan must be implemented in Node.js.
+This phase adds durable local persistence for ingested source documents using `better-sqlite3`.
+The goal is to store each original normalized source text with a stable `document_id`, source descriptor, and metadata (including timestamp fields) in SQLite.
+Chunking, embeddings, and retrieval indexing are explicitly out of scope for this phase.
 
-## Fixed Decisions (From Answers)
-- Runtime: use project-provided Node from `mise.toml` (`node = 24.13.0`).
-- CLI name: `notesrag`.
-- MVP input scope: single source per invocation.
-- MVP success output: plain text (not JSON).
-- Input size cap: 10,000 characters.
-- Document IDs: auto-generated only.
+## Scope
+- In scope:
+  - (done) Add `better-sqlite3` dependency.
+  - Add SQLite open/init layer.
+  - Create initial schema for persisted source documents.
+  - Write ingested source records to DB during `notesrag index`.
+  - Persist metadata and ingestion timestamps.
+  - Add tests for schema init + inserts + duplicate handling.
+- Out of scope:
+  - Chunk generation.
+  - Embedding generation.
+  - Vector tables/indexes.
+  - Retrieval/search commands.
 
-## Goals
-- Define and implement a stable `index` command interface.
-- Accept plain text input from common user paths (args and stdin).
-- Validate and normalize input envelope before pipeline internals run.
-- Emit deterministic output and errors so later pipeline steps can plug in cleanly.
-- Use Node.js runtime and conventions for CLI architecture, IO, and packaging.
+## Proposed Data Model (Phase-Limited)
+Single table for now:
+- `documents`
+  - `document_id TEXT PRIMARY KEY`
+  - `source_type TEXT NOT NULL` (`file` or `stdin`)
+  - `source_value TEXT NOT NULL` (resolved file path or `stdin`)
+  - `normalized_text TEXT NOT NULL`
+  - `char_count INTEGER NOT NULL`
+  - `byte_count INTEGER NOT NULL`
+  - `metadata_json TEXT NOT NULL DEFAULT '{}'`
+  - `ingested_at TEXT NOT NULL` (ISO-8601 UTC timestamp)
 
-## Deliverables
-- Node.js-based `index` CLI command with documented usage.
-- Input adapter for:
-  - file path arguments
-  - stdin (piped content)
-- Input validation rules and user-facing error messages.
-- Handoff contract from CLI layer to indexing pipeline boundary.
-- Basic tests for command behavior and failure modes.
-- README update for quickstart examples.
+Notes:
+- Keep metadata as JSON text for flexibility.
+- Do not add extra uniqueness constraints in this phase; `document_id` primary key is sufficient.
 
 ## Implementation Steps
-1. Define CLI contract (done)
-- Choose command shape (done): `notesrag index [--source PATH | --stdin]` with exactly one source per run.
-- Decide exit code policy (done) (`0` success, non-zero for validation/runtime errors).
-- Define stdout/stderr behavior (done): plain-text success output on stdout; diagnostics on stderr.
+1. Add dependency
+- Install `better-sqlite3` and commit lockfile updates if generated.
+- Verify runtime compatibility with pinned Node version.
 
-2. Define ingestion boundary interface
-- Create a minimal internal API in Node.js (example): `ingest(request) -> ingest_result`.
-- Keep this boundary independent from chunking/embedding internals.
-- Specify required request fields: raw text, source descriptor, optional metadata.
+2. Add DB module and connection lifecycle
+- Create `src/db.js` with:
+  - `openDatabase(dbPath)` for opening/creating DB.
+  - safe default DB path strategy (project-local for now, configurable later).
+  - SQLite pragmas suitable for local durability (`journal_mode = WAL`, `foreign_keys = ON`).
 
-3. Implement input adapters (A-side)
-- File adapter: read one or more text files via Node.js filesystem APIs, reject binary/empty payloads per rules.
-- Stdin adapter: detect piped input and read full stream safely using Node.js streams.
-- Editor workflow support: document temp-file/path usage pattern (editor saves file, CLI indexes file).
+3. Add schema initialization
+- Create idempotent `initSchema(db)` in `src/db.js` (or `src/schema.js`).
+- Ensure table creation runs before first write from CLI.
 
-4. Add validation and normalization
-- Normalize line endings and trim dangerous control chars.
-- Enforce max input size guardrails (hard limit: 10,000 characters).
-- Validate encoding assumptions (UTF-8 default).
-- Produce actionable, consistent validation errors.
+4. Add document repository layer
+- Create `src/documentStore.js` with:
+  - `saveDocument(db, ingestResult)` using UPSERT semantics.
+  - mapping for `sourceDescriptor`, counts, text, and `metadata` JSON.
 
-5. Implement command execution path (B-side)
-- Parse args/options.
-- Resolve exactly one input source strategy (file or stdin) and reject multi-source input.
-- Build ingest request and call the ingestion boundary.
-- Return plain-text success response with source summary + bytes/chars ingested + auto-generated document ID.
+5. Wire into index command flow
+- Update `src/cli.js` `executeIndex` flow:
+  - read payload -> ingest -> open DB -> init schema -> save document -> print success.
+- Populate ingest metadata with `command_version` from `package.json` before persistence.
+- Preserve existing success output fields; optionally add `stored=true` in a later pass.
 
-6. Add tests
-- Unit tests for arg parsing and validation behavior.
-- Adapter tests: file success/failure, stdin success/empty input.
-- CLI integration tests for exit codes and stdout/stderr contracts.
+6. Define duplicate behavior
+- Use UPSERT on `document_id` to refresh stored content for idempotent re-index operations.
+- On conflict, update: `normalized_text`, `char_count`, `byte_count`, `metadata_json`, `ingested_at`.
+- Document this behavior clearly in README.
 
-7. Document usage
-- Add README section “Index CLI (A-B step)” with 3-4 command examples.
-- Include failure examples and expected error style.
+7. Add tests
+- Unit tests for DB init and `saveDocument`.
+- Integration test for `notesrag index` writing to SQLite and record shape.
+- Duplicate-ingest test aligned with chosen behavior.
 
-## Acceptance Criteria
-- User can ingest plain text by file path and by stdin via `index` command.
-- Command accepts only one input source per invocation.
-- Invalid input paths/empty input/encoding issues fail with clear non-zero exits.
-- Inputs over 10,000 characters fail with a clear validation error.
-- Success output is deterministic and script-friendly.
-- Ingestion boundary can be reused by later pipeline stages without CLI coupling.
-- Tests cover primary success and at least key error paths.
-- Implementation runs on the project-provided Node version from `mise.toml`.
+8. Update docs
+- README: add persistence behavior, DB file location, and schema summary.
+- timeline.md: mark this storage sub-phase complete and note chunking is next phase.
+
+## Definition of Done
+- `notesrag index --source ...` and `--stdin` both persist one document row.
+- Persisted row includes:
+  - stable `document_id`
+  - source descriptor
+  - normalized text
+  - `char_count`, `byte_count`
+  - metadata JSON
+  - `ingested_at` timestamp
+- `metadata_json` includes `command_version` from `package.json`.
+- Tests pass for schema creation, insert, and duplicate strategy.
+- README reflects actual persistence behavior and current non-goals.
 
 ## Risks and Mitigations
-- Ambiguous input mode when both file and stdin are provided.
-  - Mitigation: enforce mutually exclusive source flags with explicit error.
-- Large input causing memory spikes.
-  - Mitigation: enforce size limit and fail early with guidance.
-- Future pipeline changes breaking CLI contract.
-  - Mitigation: keep interface typed/versioned and test it as a stable contract.
+- Native module install friction (`better-sqlite3`):
+  - Mitigation: document required build tooling and verify in CI/local setup.
+- Schema churn before chunking starts:
+  - Mitigation: keep schema minimal; postpone chunk-related tables.
+- Ambiguous duplicate semantics:
+  - Mitigation: choose explicit behavior now and encode via tests.
 
-## Resolved Assumptions
-- Node runtime is taken from `mise.toml` (no distribution-level Node support matrix needed now).
-- Canonical executable name is `notesrag`.
-- MVP indexing is one source per invocation.
-- MVP success output format is plain text.
-- Max input size is 10,000 characters.
-- Document IDs are auto-generated.
+## Resolved Decisions
+1. DB location: project root, filename `notesrag.db`.
+2. Duplicate behavior: `upsert/refresh` on `document_id`.
+3. Timestamp field: `ingested_at` only.
+4. Metadata inclusion now: include `command_version` from `package.json`; do not include `cwd`.

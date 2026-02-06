@@ -15,8 +15,8 @@ description: This skill is used to refactor existing code when the user requests
 1. Analyze the user's instructions and current implementation and define refactor scope and non-goals before editing.
 2. Record a baseline by running existing validation (at minimum tests; include lint, typecheck, and build when available). Abort if baseline validation fails.
 3. If coverage is insufficient for risky areas, add or improve tests before major structural changes.
-4. For each major refactor task, spawn an agent using `#runSubagent`, and ensure you orchestrate them properly.
-5. You are encouraged to use parallel agents to speed up development, such as when refactoring the internals of several files.
+4. Whenever it would be possible to delegate complexity, spawn an agent using `#runSubagent`, and ensure you explain which file you want to be refactored, and how.
+5. You are encouraged to use parallel agents to speed up development, such as doing internal code smell cleanup across multiple files.
 6. Prompt each agent clearly and concisely, including repo-specific coding practices when applicable.
 7. Make small, incremental changes that improve readability, maintainability, cohesion, and separation of concerns.
 8. Typical refactor actions include:

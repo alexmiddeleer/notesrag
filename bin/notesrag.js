@@ -2,11 +2,13 @@
 
 const { main } = require('../src/cli');
 
-main(process.argv.slice(2), {
+const io = {
   stdin: process.stdin,
   stdout: process.stdout,
   stderr: process.stderr,
   cwd: process.cwd(),
-}).then((exitCode) => {
+};
+
+main(process.argv.slice(2), io).then((exitCode) => {
   process.exitCode = exitCode;
 });

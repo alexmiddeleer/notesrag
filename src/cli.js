@@ -1,12 +1,16 @@
 const { parseArgs, usage } = require('./parseArgs');
 const { readFromFile, readFromStdin } = require('./adapters');
 const { ingest } = require('./ingest');
-const { CliError } = require('./errors');
+const { isCliError } = require('./errors');
+
+function formatSource(sourceDescriptor) {
+  return sourceDescriptor.type === 'stdin'
+    ? 'stdin'
+    : sourceDescriptor.value;
+}
 
 function formatSuccess(result) {
-  const source = result.sourceDescriptor.type === 'stdin'
-    ? 'stdin'
-    : result.sourceDescriptor.value;
+  const source = formatSource(result.sourceDescriptor);
 
   return [
     'indexed',
@@ -17,10 +21,15 @@ function formatSuccess(result) {
   ].join(' ');
 }
 
+async function resolvePayload(parsed, io) {
+  if (parsed.inputMode === 'source') {
+    return readFromFile(parsed.sourcePath, io.cwd);
+  }
+  return readFromStdin(io.stdin);
+}
+
 async function executeIndex(parsed, io) {
-  const payload = parsed.inputMode === 'source'
-    ? await readFromFile(parsed.sourcePath, io.cwd)
-    : await readFromStdin(io.stdin);
+  const payload = await resolvePayload(parsed, io);
 
   const result = ingest({
     rawText: payload.rawText,
@@ -42,12 +51,12 @@ async function main(argv, io) {
     await executeIndex(parsed, io);
     return 0;
   } catch (error) {
-    const message = error instanceof CliError
+    const message = isCliError(error)
       ? error.message
       : 'unexpected runtime error';
 
     io.stderr.write(`error: ${message}\n`);
-    return error instanceof CliError ? error.exitCode : 1;
+    return isCliError(error) ? error.exitCode : 1;
   }
 }
 
