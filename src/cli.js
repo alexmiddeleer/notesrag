@@ -57,6 +57,19 @@ async function logDebug(io, enabled, message) {
   await writeText(io.stderr, `debug: ${message}\n`);
 }
 
+function createDebugLogger(io, enabled) {
+  return async (message) => {
+    await logDebug(io, enabled, message);
+  };
+}
+
+function formatEmbeddedChunkForLog(embeddedChunk) {
+  return JSON.stringify({
+    ...embeddedChunk,
+    embedding: embeddedChunk.embedding.slice(0, 25) + '...',
+  });
+}
+
 function formatSuccess(result) {
   const source = formatSource(result.sourceDescriptor);
 
@@ -86,22 +99,21 @@ async function resolvePayload(parsed, io) {
 }
 
 async function executeIndex(parsed, io, deps = {}) {
-  const embedder = deps.embedChunks || embedChunks;
-  const openDb = deps.openDatabase || openDatabase;
-  const initDb = deps.initSchema || initSchema;
-  const persistBatch = deps.persistIndexBatch || persistIndexBatch;
-  const closeDb = deps.closeDatabase || closeDatabase;
-  const readStats = deps.getDatabaseStats || getDatabaseStats;
-  await logDebug(
-    io,
-    parsed.debug,
+  const {
+    embedChunks: embedder = embedChunks,
+    openDatabase: openDb = openDatabase,
+    initSchema: initDb = initSchema,
+    persistIndexBatch: persistBatch = persistIndexBatch,
+    closeDatabase: closeDb = closeDatabase,
+    getDatabaseStats: readStats = getDatabaseStats,
+  } = deps;
+  const debug = createDebugLogger(io, parsed.debug);
+  await debug(
     `starting index input_mode=${parsed.inputMode} embed_model=${parsed.embedModel}`,
   );
 
   const payload = await resolvePayload(parsed, io);
-  await logDebug(
-    io,
-    parsed.debug,
+  await debug(
     `loaded input source=${formatSource(payload.sourceDescriptor)} raw_chars=${payload.rawText.length}`,
   );
 
@@ -109,9 +121,7 @@ async function executeIndex(parsed, io, deps = {}) {
     rawText: payload.rawText,
     sourceDescriptor: payload.sourceDescriptor,
   });
-  await logDebug(
-    io,
-    parsed.debug,
+  await debug(
     `ingested document_id=${result.documentId} chars=${result.chars} bytes=${result.bytes}`,
   );
 
@@ -119,45 +129,28 @@ async function executeIndex(parsed, io, deps = {}) {
     documentId: result.documentId,
     text: result.normalizedText,
   });
-  await logDebug(
-    io,
-    parsed.debug,
-    `chunked chunks=${chunks.length}`,
-  );
+  await debug(`chunked chunks=${chunks.length}`);
   const embeddedChunks = await embedder({
     model: parsed.embedModel,
     chunks,
     host: process.env.OLLAMA_HOST,
   });
-  await logDebug(
-    io,
-    parsed.debug,
-    `embedded chunks=${embeddedChunks.length}`,
-  );
-  
-  embeddedChunks.length && await logDebug(
-    io,
-    parsed.debug,
-    `first embedded chunk =${(function logEmbeddedChunk(ec) {
-      return JSON.stringify({
-        ...ec,
-        embedding: ec.embedding.slice(0, 25) + '...',
-      });
-    })(embeddedChunks[0])}`,
-  );
+  await debug(`embedded chunks=${embeddedChunks.length}`);
+
+  if (embeddedChunks.length > 0) {
+    await debug(
+      `first embedded chunk =${formatEmbeddedChunkForLog(embeddedChunks[0])}`,
+    );
+  }
 
   const dimensions = embeddedChunks.length > 0 ? embeddedChunks[0].dimensions : 0;
-  await logDebug(
-    io,
-    parsed.debug,
-    `completed dimensions=${dimensions}`,
-  );
+  await debug(`completed dimensions=${dimensions}`);
 
   const dbPath = resolveDbPath(parsed.dbPath, io.cwd);
   const db = openDb(dbPath);
   try {
     initDb(db);
-    await logDebug(io, parsed.debug, 'db transaction begin');
+    await debug('db transaction begin');
     try {
       persistBatch(db, {
         document: result,
@@ -165,17 +158,15 @@ async function executeIndex(parsed, io, deps = {}) {
         sourceDescriptor: result.sourceDescriptor,
         model: parsed.embedModel,
       });
-      await logDebug(io, parsed.debug, 'db transaction commit');
+      await debug('db transaction commit');
       if (parsed.debug) {
         const stats = readStats(db);
-        await logDebug(
-          io,
-          parsed.debug,
+        await debug(
           `db stats documents=${stats.documents} chunks=${stats.chunks} embeddings=${stats.embeddings} vector_bytes=${stats.vectorBytes} db_size_mb=${stats.dbSizeMb.toFixed(3)}`,
         );
       }
     } catch (error) {
-      await logDebug(io, parsed.debug, `db transaction rollback error=${error.message}`);
+      await debug(`db transaction rollback error=${error.message}`);
       throw error;
     }
   } finally {
