@@ -34,6 +34,37 @@ async function resolvePayload(parsed, io) {
   return readFromStdin(io.stdin);
 }
 
+async function persistIndexTransaction({
+  db,
+  debug,
+  document,
+  embeddedChunks,
+  model,
+  persistBatch,
+  readStats,
+  debugEnabled,
+}) {
+  await debug('db transaction begin');
+  try {
+    persistBatch(db, {
+      document,
+      embeddedChunks,
+      sourceDescriptor: document.sourceDescriptor,
+      model,
+    });
+    await debug('db transaction commit');
+    if (debugEnabled) {
+      const stats = readStats(db);
+      await debug(
+        `db stats documents=${stats.documents} chunks=${stats.chunks} embeddings=${stats.embeddings} vector_bytes=${stats.vectorBytes} db_size_mb=${stats.dbSizeMb.toFixed(3)}`,
+      );
+    }
+  } catch (error) {
+    await debug(`db transaction rollback error=${error.message}`);
+    throw error;
+  }
+}
+
 async function executeIndex(parsed, io, deps = {}) {
   const {
     embedChunks: embedder = embedChunks,
@@ -86,25 +117,16 @@ async function executeIndex(parsed, io, deps = {}) {
   const db = openDb(dbPath);
   try {
     initDb(db);
-    await debug('db transaction begin');
-    try {
-      persistBatch(db, {
-        document: result,
-        embeddedChunks,
-        sourceDescriptor: result.sourceDescriptor,
-        model: parsed.embedModel,
-      });
-      await debug('db transaction commit');
-      if (parsed.debug) {
-        const stats = readStats(db);
-        await debug(
-          `db stats documents=${stats.documents} chunks=${stats.chunks} embeddings=${stats.embeddings} vector_bytes=${stats.vectorBytes} db_size_mb=${stats.dbSizeMb.toFixed(3)}`,
-        );
-      }
-    } catch (error) {
-      await debug(`db transaction rollback error=${error.message}`);
-      throw error;
-    }
+    await persistIndexTransaction({
+      db,
+      debug,
+      document: result,
+      embeddedChunks,
+      model: parsed.embedModel,
+      persistBatch,
+      readStats,
+      debugEnabled: parsed.debug,
+    });
   } finally {
     closeDb(db);
   }

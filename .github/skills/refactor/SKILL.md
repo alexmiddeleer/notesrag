@@ -24,6 +24,7 @@ description: This skill is used to refactor existing code when the user requests
    - Renaming identifiers for clarity.
    - Removing dead or redundant code.
    - Reducing coupling and simplifying control flow.
+   - Eliminating excessive nesting.
 9. Re-run relevant validation after each meaningful change and stop if regressions appear.
 10. Only create branches or commits when the user asks for git operations; do not commit failing code.
 
