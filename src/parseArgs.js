@@ -9,6 +9,7 @@ function usage() {
     'Options:',
     '  --source <path>  Read plain text from one file',
     '  --stdin          Read plain text from piped stdin',
+    '  --embed-model    Embedding model name (default: nomic-embed-text)',
     '  --help           Show command help',
   ].join('\n');
 }
@@ -29,6 +30,7 @@ function parseArgs(argv) {
 
   let sourcePath;
   let useStdin = false;
+  let embedModel = 'nomic-embed-text';
 
   for (let i = 0; i < rest.length; i += 1) {
     const token = rest[i];
@@ -52,6 +54,16 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (token === '--embed-model') {
+      const next = rest[i + 1];
+      if (!next || next.startsWith('-')) {
+        throw new CliError('missing value for --embed-model');
+      }
+      embedModel = next;
+      i += 1;
+      continue;
+    }
+
     throw new CliError(`unknown option '${token}'`);
   }
 
@@ -68,6 +80,7 @@ function parseArgs(argv) {
     command: 'index',
     inputMode: sourcePath ? 'source' : 'stdin',
     sourcePath,
+    embedModel,
   };
 }
 

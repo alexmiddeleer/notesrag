@@ -7,7 +7,8 @@
     "notesrag": "./bin/notesrag.js"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:e2e": "bash test/e2e/cli.e2e.sh"
   },
   "engines": {
     "node": ">=24.13.0"

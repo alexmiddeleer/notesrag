@@ -15,6 +15,12 @@ test('parseArgs accepts --source', () => {
 test('parseArgs accepts --stdin', () => {
   const parsed = parseArgs(['index', '--stdin']);
   assert.equal(parsed.inputMode, 'stdin');
+  assert.equal(parsed.embedModel, 'nomic-embed-text');
+});
+
+test('parseArgs accepts --embed-model override', () => {
+  const parsed = parseArgs(['index', '--stdin', '--embed-model', 'all-minilm']);
+  assert.equal(parsed.embedModel, 'all-minilm');
 });
 
 test('parseArgs rejects multiple sources', () => {
@@ -23,6 +29,10 @@ test('parseArgs rejects multiple sources', () => {
 
 test('parseArgs rejects missing source value', () => {
   assertParseError(['index', '--source'], /missing value/);
+});
+
+test('parseArgs rejects missing embed model value', () => {
+  assertParseError(['index', '--stdin', '--embed-model'], /missing value for --embed-model/);
 });
 
 test('parseArgs rejects missing mode', () => {

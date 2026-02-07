@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 const { main } = require('../src/cli');
+const { CliError } = require('../src/errors');
 const { withTempDir } = require('./helpers/tmp');
 
 function ioFor({ cwd, stdinChunks = [], isTTY = false } = {}) {
@@ -25,32 +26,40 @@ function ioFor({ cwd, stdinChunks = [], isTTY = false } = {}) {
   };
 }
 
+function mockEmbedder({ dimensions = 3 } = {}) {
+  return async ({ chunks }) => chunks.map((chunk) => ({
+    ...chunk,
+    embedding: Array(dimensions).fill(0.1),
+    dimensions,
+  }));
+}
+
 test('cli indexes file input', async () => {
   await withTempDir(async (dir) => {
     const file = path.join(dir, 'note.txt');
     await fs.writeFile(file, 'hello world');
 
     const { io, out, err } = ioFor({ cwd: dir, isTTY: true });
-    const code = await main(['index', '--source', file], io);
+    const code = await main(['index', '--source', file], io, { embedChunks: mockEmbedder() });
 
     assert.equal(code, 0);
-    assert.match(out.value, /^indexed document_id=doc_[a-f0-9]{16} source=.* chars=11 bytes=11\n$/);
+    assert.match(out.value, /^indexed document_id=doc_[a-f0-9]{16} source=.* chars=11 bytes=11 chunks=1 dims=3\n$/);
     assert.equal(err.value, '');
   });
 });
 
 test('cli indexes stdin input', async () => {
   const { io, out, err } = ioFor({ stdinChunks: ['hello stdin'], isTTY: false });
-  const code = await main(['index', '--stdin'], io);
+  const code = await main(['index', '--stdin'], io, { embedChunks: mockEmbedder() });
 
   assert.equal(code, 0);
-  assert.match(out.value, /^indexed document_id=doc_[a-f0-9]{16} source=stdin chars=11 bytes=11\n$/);
+  assert.match(out.value, /^indexed document_id=doc_[a-f0-9]{16} source=stdin chars=11 bytes=11 chunks=1 dims=3\n$/);
   assert.equal(err.value, '');
 });
 
 test('cli fails when both sources are provided', async () => {
   const { io, out, err } = ioFor({ isTTY: false });
-  const code = await main(['index', '--stdin', '--source', 'x.txt'], io);
+  const code = await main(['index', '--stdin', '--source', 'x.txt'], io, { embedChunks: mockEmbedder() });
 
   assert.notEqual(code, 0);
   assert.equal(out.value, '');
@@ -59,9 +68,22 @@ test('cli fails when both sources are provided', async () => {
 
 test('cli fails for empty stdin', async () => {
   const { io, out, err } = ioFor({ stdinChunks: [], isTTY: false });
-  const code = await main(['index', '--stdin'], io);
+  const code = await main(['index', '--stdin'], io, { embedChunks: mockEmbedder() });
 
   assert.notEqual(code, 0);
   assert.equal(out.value, '');
   assert.match(err.value, /^error: stdin input is empty/);
+});
+
+test('cli surfaces embedding failures as cli errors', async () => {
+  const failingEmbedder = async () => {
+    throw new CliError('failed to reach Ollama. start it with `ollama serve` and retry');
+  };
+
+  const { io, out, err } = ioFor({ stdinChunks: ['hello stdin'], isTTY: false });
+  const code = await main(['index', '--stdin'], io, { embedChunks: failingEmbedder });
+
+  assert.notEqual(code, 0);
+  assert.equal(out.value, '');
+  assert.match(err.value, /^error: failed to reach Ollama/);
 });

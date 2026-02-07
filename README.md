@@ -2,6 +2,8 @@
 
 This project is centered around building a toy rag that doesn’t include the final llm step. It will run completely locally. The goal is learning and making something cool that works decently. Here is a basic mermaid chart:
 
+## mermaid for planned flow
+
 ```mermaid 
 
 flowchart TD
@@ -57,12 +59,16 @@ flowchart TD
 ## Index CLI (A-B step)
 
 Runtime is pinned by `mise.toml` (`node = 24.13.0`).
+Indexing currently implements mermaid steps through `H`:
+- `G`: deterministic chunking with overlap
+- `H`: local embedding generation via Ollama (`nomic-embed-text` by default)
 
 ### Command
 
 ```bash
 notesrag index --source <path>
 notesrag index --stdin
+notesrag index --stdin --embed-model nomic-embed-text
 ```
 
 Exactly one input source is allowed per invocation.
@@ -83,7 +89,7 @@ notesrag index --source /tmp/draft-note.txt
 Success output is plain text:
 
 ```text
-indexed document_id=doc_<hex> source=<path-or-stdin> chars=<count> bytes=<count>
+indexed document_id=doc_<hex> source=<path-or-stdin> chars=<count> bytes=<count> chunks=<count> dims=<count>
 ```
 
 ### Failure examples
@@ -101,3 +107,21 @@ printf 'hello' | notesrag index --stdin --source ./shopping-list.md
 notesrag index --source ./too-big.txt
 # -> error: input exceeds max size of 10000 characters
 ```
+
+### Embeddings runtime assumptions
+
+- Ollama is running locally before indexing:
+
+```bash
+ollama serve
+```
+
+- The embedding model exists locally:
+
+```bash
+ollama pull nomic-embed-text
+```
+
+- If `notesrag index` cannot reach Ollama, the CLI returns an actionable error.
+- If the model is missing, the CLI suggests the exact `ollama pull` command.
+- According to vendor docs, Ollama `/api/embed` vectors are L2-normalized (unit length).

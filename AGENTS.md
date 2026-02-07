@@ -1,0 +1,1 @@
+Please look at README.md. Note that skills are located in .github/skills. some vendor docs may be located in vendor-docs/, but if not, use model knowledge.
