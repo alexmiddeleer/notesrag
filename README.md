@@ -1,6 +1,14 @@
 # toy-rag 
 
+**Attention AGENTS, please see AGENTS.md for all actions**
+
 This project is centered around building a toy rag that doesn’t include the final llm step. It will run completely locally. The goal is learning and making something cool that works decently. Here is a basic mermaid chart:
+
+## tools used
+
+* ollama
+* better-sqlite3
+* (more may exist, check package.json)
 
 ## mermaid for planned flow
 
@@ -21,8 +29,7 @@ flowchart TD
   F --> G[Chunking layer<br/>size, overlap, chunk ids]
   G --> H[Generate embeddings<br/>per chunk]
   H --> I[Persist chunks + embeddings<br/>SQLite tables]
-  I --> J[Optional lexical index, probably will not build<br/>FTS / BM25]
-  J --> K[Commit transaction]
+  I --> J[Commit transaction]
 
   %% ------------------
   %% Retrieval pipeline
