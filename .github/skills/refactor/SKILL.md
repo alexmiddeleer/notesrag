@@ -37,3 +37,8 @@ description: This skill is used to refactor existing code when the user requests
 ## Completion Output
 
 1. Brief summary of activites performed.
+
+## Suggested use of subagents
+
+1. Retrieve refactor suggestions from a code analysis agent
+2. In separate subagents, have the subagent implement the suggested refactors one by one, running validation after each.
