@@ -10,6 +10,7 @@ function usage() {
     '  --source <path>  Read plain text from one file',
     '  --stdin          Read plain text from piped stdin',
     '  --embed-model    Embedding model name (default: nomic-embed-text)',
+    '  --debug          Emit verbose debug logs to stderr',
     '  --help           Show command help',
   ].join('\n');
 }
@@ -31,6 +32,7 @@ function parseArgs(argv) {
   let sourcePath;
   let useStdin = false;
   let embedModel = 'nomic-embed-text';
+  let debug = false;
 
   for (let i = 0; i < rest.length; i += 1) {
     const token = rest[i];
@@ -41,6 +43,11 @@ function parseArgs(argv) {
 
     if (token === '--stdin') {
       useStdin = true;
+      continue;
+    }
+
+    if (token === '--debug') {
+      debug = true;
       continue;
     }
 
@@ -81,6 +88,7 @@ function parseArgs(argv) {
     inputMode: sourcePath ? 'source' : 'stdin',
     sourcePath,
     embedModel,
+    debug,
   };
 }
 

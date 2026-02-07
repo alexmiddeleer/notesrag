@@ -57,6 +57,20 @@ test('cli indexes stdin input', async () => {
   assert.equal(err.value, '');
 });
 
+test('cli emits debug logs when --debug is provided', async () => {
+  const { io, out, err } = ioFor({ stdinChunks: ['hello stdin'], isTTY: false });
+  const code = await main(['index', '--stdin', '--debug'], io, { embedChunks: mockEmbedder() });
+
+  assert.equal(code, 0);
+  assert.match(out.value, /^indexed document_id=doc_[a-f0-9]{16} source=stdin chars=11 bytes=11 chunks=1 dims=3\n$/);
+  assert.match(err.value, /debug: starting index input_mode=stdin embed_model=nomic-embed-text/);
+  assert.match(err.value, /debug: loaded input source=stdin raw_chars=11/);
+  assert.match(err.value, /debug: ingested document_id=doc_[a-f0-9]{16} chars=11 bytes=11/);
+  assert.match(err.value, /debug: chunked chunks=1/);
+  assert.match(err.value, /debug: embedded chunks=1/);
+  assert.match(err.value, /debug: completed dimensions=3/);
+});
+
 test('cli fails when both sources are provided', async () => {
   const { io, out, err } = ioFor({ isTTY: false });
   const code = await main(['index', '--stdin', '--source', 'x.txt'], io, { embedChunks: mockEmbedder() });

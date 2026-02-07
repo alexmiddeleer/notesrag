@@ -42,6 +42,13 @@ function writeText(stream, text) {
   });
 }
 
+async function logDebug(io, enabled, message) {
+  if (!enabled) {
+    return;
+  }
+  await writeText(io.stderr, `debug: ${message}\n`);
+}
+
 function formatSuccess(result) {
   const source = formatSource(result.sourceDescriptor);
 
@@ -65,24 +72,66 @@ async function resolvePayload(parsed, io) {
 
 async function executeIndex(parsed, io, deps = {}) {
   const embedder = deps.embedChunks || embedChunks;
+  await logDebug(
+    io,
+    parsed.debug,
+    `starting index input_mode=${parsed.inputMode} embed_model=${parsed.embedModel}`,
+  );
+
   const payload = await resolvePayload(parsed, io);
+  await logDebug(
+    io,
+    parsed.debug,
+    `loaded input source=${formatSource(payload.sourceDescriptor)} raw_chars=${payload.rawText.length}`,
+  );
 
   const result = ingest({
     rawText: payload.rawText,
     sourceDescriptor: payload.sourceDescriptor,
   });
+  await logDebug(
+    io,
+    parsed.debug,
+    `ingested document_id=${result.documentId} chars=${result.chars} bytes=${result.bytes}`,
+  );
 
   const chunks = chunkDocument({
     documentId: result.documentId,
     text: result.normalizedText,
   });
+  await logDebug(
+    io,
+    parsed.debug,
+    `chunked chunks=${chunks.length}`,
+  );
   const embeddedChunks = await embedder({
     model: parsed.embedModel,
     chunks,
     host: process.env.OLLAMA_HOST,
   });
+  await logDebug(
+    io,
+    parsed.debug,
+    `embedded chunks=${embeddedChunks.length}`,
+  );
+  
+  embeddedChunks.length && await logDebug(
+    io,
+    parsed.debug,
+    `first embedded chunk =${(function logEmbeddedChunk(ec) {
+      return JSON.stringify({
+        ...ec,
+        embedding: ec.embedding.slice(0, 25) + '...',
+      });
+    })(embeddedChunks[0])}`,
+  );
 
   const dimensions = embeddedChunks.length > 0 ? embeddedChunks[0].dimensions : 0;
+  await logDebug(
+    io,
+    parsed.debug,
+    `completed dimensions=${dimensions}`,
+  );
   await writeText(io.stdout, `${formatSuccess({
     ...result,
     chunkCount: embeddedChunks.length,

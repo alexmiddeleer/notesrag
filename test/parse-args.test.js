@@ -16,11 +16,17 @@ test('parseArgs accepts --stdin', () => {
   const parsed = parseArgs(['index', '--stdin']);
   assert.equal(parsed.inputMode, 'stdin');
   assert.equal(parsed.embedModel, 'nomic-embed-text');
+  assert.equal(parsed.debug, false);
 });
 
 test('parseArgs accepts --embed-model override', () => {
   const parsed = parseArgs(['index', '--stdin', '--embed-model', 'all-minilm']);
   assert.equal(parsed.embedModel, 'all-minilm');
+});
+
+test('parseArgs accepts --debug', () => {
+  const parsed = parseArgs(['index', '--stdin', '--debug']);
+  assert.equal(parsed.debug, true);
 });
 
 test('parseArgs rejects multiple sources', () => {

@@ -69,6 +69,7 @@ Indexing currently implements mermaid steps through `H`:
 notesrag index --source <path>
 notesrag index --stdin
 notesrag index --stdin --embed-model nomic-embed-text
+notesrag index --stdin --debug
 ```
 
 Exactly one input source is allowed per invocation.
@@ -91,6 +92,8 @@ Success output is plain text:
 ```text
 indexed document_id=doc_<hex> source=<path-or-stdin> chars=<count> bytes=<count> chunks=<count> dims=<count>
 ```
+
+When `--debug` is provided, verbose progress logs are emitted to stderr with a `debug:` prefix.
 
 ### Failure examples
 
