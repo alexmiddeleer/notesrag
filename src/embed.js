@@ -15,6 +15,10 @@ function buildClient(host) {
   return ollama;
 }
 
+function errorMessage(error) {
+  return error && error.message ? error.message : 'unknown error';
+}
+
 function isMissingModelError(error) {
   const message = String(error && error.message ? error.message : '').toLowerCase();
   return message.includes('model') && message.includes('not found');
@@ -46,6 +50,31 @@ function assertVector(vector) {
   }
 }
 
+function resolveEmbeddings(response, expectedLength) {
+  const vectors = response && response.embeddings;
+  if (!Array.isArray(vectors)) {
+    throw new CliError('embedding response is missing embeddings');
+  }
+  if (vectors.length !== expectedLength) {
+    throw new CliError('embedding response did not match chunk count');
+  }
+
+  return vectors;
+}
+
+function mapEmbeddingsToChunks(chunks, vectors) {
+  return chunks.map((chunk, index) => {
+    const embedding = vectors[index];
+    assertVector(embedding);
+
+    return {
+      ...chunk,
+      embedding,
+      dimensions: embedding.length,
+    };
+  });
+}
+
 async function embedChunks({ chunks, model = DEFAULT_EMBED_MODEL, host, client }) {
   if (!Array.isArray(chunks)) {
     throw new CliError('embedding chunks must be an array');
@@ -67,27 +96,11 @@ async function embedChunks({ chunks, model = DEFAULT_EMBED_MODEL, host, client }
     if (isMissingModelError(error)) {
       throw new CliError(`embedding model not found: ${model}. run \`ollama pull ${model}\``);
     }
-    throw new CliError(`embedding request failed: ${error && error.message ? error.message : 'unknown error'}`);
+    throw new CliError(`embedding request failed: ${errorMessage(error)}`);
   }
 
-  const vectors = response && response.embeddings;
-  if (!Array.isArray(vectors)) {
-    throw new CliError('embedding response is missing embeddings');
-  }
-  if (vectors.length !== chunks.length) {
-    throw new CliError('embedding response did not match chunk count');
-  }
-
-  return chunks.map((chunk, index) => {
-    const embedding = vectors[index];
-    assertVector(embedding);
-
-    return {
-      ...chunk,
-      embedding,
-      dimensions: embedding.length,
-    };
-  });
+  const vectors = resolveEmbeddings(response, chunks.length);
+  return mapEmbeddingsToChunks(chunks, vectors);
 }
 
 module.exports = {

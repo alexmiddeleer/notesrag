@@ -5,6 +5,12 @@ const { CliError } = require('./errors');
 
 const SCHEMA_VERSION = '1';
 
+function assertDb(db) {
+  if (!db) {
+    throw new CliError('db instance is required');
+  }
+}
+
 function openDatabase(dbPath) {
   if (typeof dbPath !== 'string' || dbPath.length === 0) {
     throw new CliError('db path is required');
@@ -19,9 +25,7 @@ function openDatabase(dbPath) {
 }
 
 function initSchema(db) {
-  if (!db) {
-    throw new CliError('db instance is required');
-  }
+  assertDb(db);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS schema_meta (
@@ -69,6 +73,17 @@ function initSchema(db) {
     VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `).run('schema_version', SCHEMA_VERSION);
+}
+
+function assertSourceDescriptor(source) {
+  if (!source || typeof source !== 'object') {
+    throw new CliError('source descriptor is required');
+  }
+  if (typeof source.type !== 'string' || typeof source.value !== 'string') {
+    throw new CliError('source descriptor is invalid');
+  }
+
+  return source;
 }
 
 function assertDimensions(vector, expected) {
@@ -154,15 +169,76 @@ function assertChunk(chunk, expectedDimensions) {
   return dimensions;
 }
 
+function getExpectedDimensions(embeddedChunks) {
+  if (embeddedChunks.length === 0) {
+    return 0;
+  }
+
+  const first = embeddedChunks[0];
+  return Number.isInteger(first.dimensions)
+    ? first.dimensions
+    : first.embedding.length;
+}
+
+function prepareStatements(db) {
+  return {
+    insertDocument: db.prepare(`
+      INSERT INTO documents (
+        document_id,
+        source_type,
+        source_value,
+        chars,
+        bytes,
+        normalized_text,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(document_id) DO UPDATE SET
+        source_type = excluded.source_type,
+        source_value = excluded.source_value,
+        chars = excluded.chars,
+        bytes = excluded.bytes,
+        normalized_text = excluded.normalized_text,
+        updated_at = excluded.updated_at
+    `),
+    deleteEmbeddings: db.prepare(`
+      DELETE FROM embeddings
+      WHERE chunk_id IN (
+        SELECT chunk_id FROM chunks WHERE document_id = ?
+      )
+    `),
+    deleteChunks: db.prepare('DELETE FROM chunks WHERE document_id = ?'),
+    insertChunk: db.prepare(`
+      INSERT INTO chunks (
+        chunk_id,
+        document_id,
+        chunk_index,
+        start_char,
+        end_char,
+        text
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `),
+    insertEmbedding: db.prepare(`
+      INSERT INTO embeddings (
+        chunk_id,
+        model,
+        dimensions,
+        vector_blob
+      ) VALUES (?, ?, ?, ?)
+      ON CONFLICT(chunk_id) DO UPDATE SET
+        model = excluded.model,
+        dimensions = excluded.dimensions,
+        vector_blob = excluded.vector_blob
+    `),
+  };
+}
+
 function persistIndexBatch(db, {
   document,
   embeddedChunks,
   sourceDescriptor,
   model,
 }) {
-  if (!db) {
-    throw new CliError('db instance is required');
-  }
+  assertDb(db);
 
   assertDocument(document);
 
@@ -170,74 +246,19 @@ function persistIndexBatch(db, {
     throw new CliError('embedded chunks are required');
   }
 
-  const source = sourceDescriptor || document.sourceDescriptor;
-  if (!source || typeof source !== 'object') {
-    throw new CliError('source descriptor is required');
-  }
-  if (typeof source.type !== 'string' || typeof source.value !== 'string') {
-    throw new CliError('source descriptor is invalid');
-  }
+  const source = assertSourceDescriptor(sourceDescriptor || document.sourceDescriptor);
   if (typeof model !== 'string' || model.length === 0) {
     throw new CliError('embedding model is required');
   }
 
-  const expectedDimensions = embeddedChunks.length > 0
-    ? (Number.isInteger(embeddedChunks[0].dimensions)
-      ? embeddedChunks[0].dimensions
-      : embeddedChunks[0].embedding.length)
-    : 0;
-
-  const insertDocument = db.prepare(`
-    INSERT INTO documents (
-      document_id,
-      source_type,
-      source_value,
-      chars,
-      bytes,
-      normalized_text,
-      updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(document_id) DO UPDATE SET
-      source_type = excluded.source_type,
-      source_value = excluded.source_value,
-      chars = excluded.chars,
-      bytes = excluded.bytes,
-      normalized_text = excluded.normalized_text,
-      updated_at = excluded.updated_at
-  `);
-
-  const deleteEmbeddings = db.prepare(`
-    DELETE FROM embeddings
-    WHERE chunk_id IN (
-      SELECT chunk_id FROM chunks WHERE document_id = ?
-    )
-  `);
-
-  const deleteChunks = db.prepare('DELETE FROM chunks WHERE document_id = ?');
-
-  const insertChunk = db.prepare(`
-    INSERT INTO chunks (
-      chunk_id,
-      document_id,
-      chunk_index,
-      start_char,
-      end_char,
-      text
-    ) VALUES (?, ?, ?, ?, ?, ?)
-  `);
-
-  const insertEmbedding = db.prepare(`
-    INSERT INTO embeddings (
-      chunk_id,
-      model,
-      dimensions,
-      vector_blob
-    ) VALUES (?, ?, ?, ?)
-    ON CONFLICT(chunk_id) DO UPDATE SET
-      model = excluded.model,
-      dimensions = excluded.dimensions,
-      vector_blob = excluded.vector_blob
-  `);
+  const expectedDimensions = getExpectedDimensions(embeddedChunks);
+  const {
+    insertDocument,
+    deleteEmbeddings,
+    deleteChunks,
+    insertChunk,
+    insertEmbedding,
+  } = prepareStatements(db);
 
   const now = new Date().toISOString();
   const writeTx = db.transaction(() => {
@@ -286,9 +307,7 @@ function closeDatabase(db) {
 }
 
 function getDatabaseStats(db) {
-  if (!db) {
-    throw new CliError('db instance is required');
-  }
+  assertDb(db);
 
   const docCount = db.prepare('SELECT COUNT(*) AS count FROM documents').get().count;
   const chunkCount = db.prepare('SELECT COUNT(*) AS count FROM chunks').get().count;
