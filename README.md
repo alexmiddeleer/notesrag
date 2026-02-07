@@ -66,9 +66,20 @@ flowchart TD
 ## Index CLI (A-B step)
 
 Runtime is pinned by `mise.toml` (`node = 24.13.0`).
-Indexing currently implements mermaid steps through `H`:
+Indexing currently implements mermaid steps through `J`:
 - `G`: deterministic chunking with overlap
 - `H`: local embedding generation via Ollama (`nomic-embed-text` by default)
+- `I`: persist chunks + embeddings to SQLite
+- `J`: commit transaction after successful batch write
+
+### Database schema (human readable)
+
+- `schema_meta`: key/value pairs for schema versioning
+- `documents`: one row per document (source type/value, char + byte counts, normalized text, updated timestamp)
+- `chunks`: one row per chunk (chunk id, document id, chunk index, start/end char, text)
+- `embeddings`: one row per chunk embedding (model, dimensions, packed float32 vector blob)
+- Relationships: `chunks.document_id` -> `documents.document_id`, `embeddings.chunk_id` -> `chunks.chunk_id`
+- Indexes: `chunks(document_id, chunk_index)` and `embeddings(model, dimensions)`
 
 ### Command
 

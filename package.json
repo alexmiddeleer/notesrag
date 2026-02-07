@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "node --test",
-    "test:e2e": "bash test/e2e/cli.e2e.sh"
+    "test:e2e": "bash test/e2e/cli.e2e.sh",
+    "debug": "echo foobar | bin/notesrag.js index --debug --stdin"
   },
   "engines": {
     "node": ">=24.13.0"

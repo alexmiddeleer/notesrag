@@ -16,6 +16,7 @@ test('parseArgs accepts --stdin', () => {
   const parsed = parseArgs(['index', '--stdin']);
   assert.equal(parsed.inputMode, 'stdin');
   assert.equal(parsed.embedModel, 'nomic-embed-text');
+  assert.equal(parsed.dbPath, '.data/notesrag.sqlite');
   assert.equal(parsed.debug, false);
 });
 
@@ -29,6 +30,11 @@ test('parseArgs accepts --debug', () => {
   assert.equal(parsed.debug, true);
 });
 
+test('parseArgs accepts --db-path override', () => {
+  const parsed = parseArgs(['index', '--stdin', '--db-path', '/tmp/notesrag.sqlite']);
+  assert.equal(parsed.dbPath, '/tmp/notesrag.sqlite');
+});
+
 test('parseArgs rejects multiple sources', () => {
   assertParseError(['index', '--stdin', '--source', 'notes.txt'], /exactly one input source/);
 });
@@ -39,6 +45,10 @@ test('parseArgs rejects missing source value', () => {
 
 test('parseArgs rejects missing embed model value', () => {
   assertParseError(['index', '--stdin', '--embed-model'], /missing value for --embed-model/);
+});
+
+test('parseArgs rejects missing db path value', () => {
+  assertParseError(['index', '--stdin', '--db-path'], /missing value for --db-path/);
 });
 
 test('parseArgs rejects missing mode', () => {

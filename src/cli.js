@@ -3,7 +3,15 @@ const { readFromFile, readFromStdin } = require('./adapters');
 const { ingest } = require('./ingest');
 const { chunkDocument } = require('./chunk');
 const { embedChunks } = require('./embed');
+const {
+  openDatabase,
+  initSchema,
+  persistIndexBatch,
+  closeDatabase,
+  getDatabaseStats,
+} = require('./db');
 const { isCliError } = require('./errors');
+const path = require('node:path');
 
 function formatSource(sourceDescriptor) {
   return sourceDescriptor.type === 'stdin'
@@ -63,6 +71,13 @@ function formatSuccess(result) {
   ].join(' ');
 }
 
+function resolveDbPath(dbPath, cwd) {
+  if (path.isAbsolute(dbPath)) {
+    return dbPath;
+  }
+  return path.resolve(cwd, dbPath);
+}
+
 async function resolvePayload(parsed, io) {
   if (parsed.inputMode === 'source') {
     return readFromFile(parsed.sourcePath, io.cwd);
@@ -72,6 +87,11 @@ async function resolvePayload(parsed, io) {
 
 async function executeIndex(parsed, io, deps = {}) {
   const embedder = deps.embedChunks || embedChunks;
+  const openDb = deps.openDatabase || openDatabase;
+  const initDb = deps.initSchema || initSchema;
+  const persistBatch = deps.persistIndexBatch || persistIndexBatch;
+  const closeDb = deps.closeDatabase || closeDatabase;
+  const readStats = deps.getDatabaseStats || getDatabaseStats;
   await logDebug(
     io,
     parsed.debug,
@@ -132,6 +152,36 @@ async function executeIndex(parsed, io, deps = {}) {
     parsed.debug,
     `completed dimensions=${dimensions}`,
   );
+
+  const dbPath = resolveDbPath(parsed.dbPath, io.cwd);
+  const db = openDb(dbPath);
+  try {
+    initDb(db);
+    await logDebug(io, parsed.debug, 'db transaction begin');
+    try {
+      persistBatch(db, {
+        document: result,
+        embeddedChunks,
+        sourceDescriptor: result.sourceDescriptor,
+        model: parsed.embedModel,
+      });
+      await logDebug(io, parsed.debug, 'db transaction commit');
+      if (parsed.debug) {
+        const stats = readStats(db);
+        await logDebug(
+          io,
+          parsed.debug,
+          `db stats documents=${stats.documents} chunks=${stats.chunks} embeddings=${stats.embeddings} vector_bytes=${stats.vectorBytes} db_size_mb=${stats.dbSizeMb.toFixed(3)}`,
+        );
+      }
+    } catch (error) {
+      await logDebug(io, parsed.debug, `db transaction rollback error=${error.message}`);
+      throw error;
+    }
+  } finally {
+    closeDb(db);
+  }
+
   await writeText(io.stdout, `${formatSuccess({
     ...result,
     chunkCount: embeddedChunks.length,

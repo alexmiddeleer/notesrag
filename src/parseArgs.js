@@ -10,6 +10,7 @@ function usage() {
     '  --source <path>  Read plain text from one file',
     '  --stdin          Read plain text from piped stdin',
     '  --embed-model    Embedding model name (default: nomic-embed-text)',
+    '  --db-path        SQLite file path (default: .data/notesrag.sqlite)',
     '  --debug          Emit verbose debug logs to stderr',
     '  --help           Show command help',
   ].join('\n');
@@ -32,6 +33,7 @@ function parseArgs(argv) {
   let sourcePath;
   let useStdin = false;
   let embedModel = 'nomic-embed-text';
+  let dbPath = '.data/notesrag.sqlite';
   let debug = false;
 
   for (let i = 0; i < rest.length; i += 1) {
@@ -71,6 +73,16 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (token === '--db-path') {
+      const next = rest[i + 1];
+      if (!next || next.startsWith('-')) {
+        throw new CliError('missing value for --db-path');
+      }
+      dbPath = next;
+      i += 1;
+      continue;
+    }
+
     throw new CliError(`unknown option '${token}'`);
   }
 
@@ -88,6 +100,7 @@ function parseArgs(argv) {
     inputMode: sourcePath ? 'source' : 'stdin',
     sourcePath,
     embedModel,
+    dbPath,
     debug,
   };
 }
