@@ -1,4 +1,3 @@
-const test = require('node:test');
 const assert = require('node:assert/strict');
 const { ingest, MAX_CHARS, normalizeText } = require('../src/ingest');
 
