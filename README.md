@@ -39,7 +39,6 @@ flowchart TD
   C --> L[Parse query]
   L --> M[Generate query embedding]
   M --> N[Vector similarity search<br/>top-k chunks]
-  N --> O[Optional rerank / filter<br/>lexical or metadata, won’t build initially]
   O --> P[Return ranked chunks<br/>verbatim]
   P --> A
 
