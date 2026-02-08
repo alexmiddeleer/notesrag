@@ -8,3 +8,4 @@ These are todos for the developer, for future work. If looking for a plan, check
 
 1. make a script that starts up ollama server if it's not running, runs it in the background, and turns it off later.
 2. (from README mermain) before I --> J[Optional lexical index, probably will not build<br/>FTS / BM25]
+3. N --> O[Optional rerank / filter<br/>lexical or metadata, won’t build initially]
