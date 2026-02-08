@@ -146,3 +146,77 @@ ollama pull nomic-embed-text
 - If `notesrag index` cannot reach Ollama, the CLI returns an actionable error.
 - If the model is missing, the CLI suggests the exact `ollama pull` command.
 - According to vendor docs, Ollama `/api/embed` vectors are L2-normalized (unit length).
+
+## Query CLI (C-P step)
+
+Querying now implements mermaid steps through `P`:
+- `L`: query parsing (`--text` or `--stdin`)
+- `M`: query embedding via Ollama (`--embed-model`)
+- `N`: vector similarity ranking over stored embeddings (full scan)
+- `P`: ranked chunk return (verbatim, markdown output)
+
+### Command
+
+```bash
+notesrag query --text "buy dairy items"
+notesrag query --stdin
+notesrag query --text "buy milk" --top-k 3
+notesrag query --text "buy milk" --embed-model nomic-embed-text --db-path .data/notesrag.sqlite
+notesrag query --text "buy milk" --debug
+```
+
+Exactly one query source is allowed per invocation.
+
+### Output
+
+Results are human-readable markdown and include source metadata.
+
+```text
+## Query Results
+
+### 1. score=0.912345
+- chunk_id: chunk_abc123
+- document_id: doc_def456
+- source: file:/absolute/path/to/note.txt
+- chunk_range: 0-120
+
+buy milk
+```
+
+When no relevant chunks are found, the command exits successfully and prints:
+
+```text
+No relevant documents were found.
+```
+
+### Failure examples
+
+```bash
+# Missing query source
+notesrag query
+# -> error: missing query input. use --text <query> or --stdin
+
+# Multiple query sources
+printf 'hello' | notesrag query --stdin --text "hello"
+# -> error: provide exactly one query source: --text or --stdin
+
+# Invalid top-k
+notesrag query --text "hello" --top-k 0
+# -> error: --top-k must be an integer between 1 and 50
+```
+
+### Query troubleshooting
+
+- If `notesrag query` cannot reach Ollama, start Ollama locally:
+
+```bash
+ollama serve
+```
+
+- If model is missing, pull it:
+
+```bash
+ollama pull nomic-embed-text
+```
+
+- If query fails with a dimension mismatch, re-index the documents with the same embedding model used for query.

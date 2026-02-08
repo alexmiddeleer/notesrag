@@ -1,6 +1,14 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { openDatabase, initSchema, persistIndexBatch, closeDatabase } = require('../src/db');
+const {
+  openDatabase,
+  initSchema,
+  persistIndexBatch,
+  closeDatabase,
+  packFloat32,
+  unpackFloat32,
+  listEmbeddingRowsByModel,
+} = require('../src/db');
 const { withTempDir } = require('./helpers/tmp');
 
 function buildChunk({
@@ -226,6 +234,61 @@ test('persistIndexBatch upserts by document id', async () => {
       assert.equal(chunkText, 'goodbye');
       assert.equal(docRow.chars, 7);
       assert.equal(docRow.normalized_text, 'goodbye');
+    } finally {
+      closeDatabase(db);
+    }
+  });
+});
+
+test('unpackFloat32 decodes packed vectors', () => {
+  const packed = packFloat32([0.5, -0.25, 0.125]);
+  const unpacked = unpackFloat32(packed, 3);
+  assert.deepEqual(unpacked, [0.5, -0.25, 0.125]);
+});
+
+test('unpackFloat32 rejects invalid blob size', () => {
+  assert.throws(() => {
+    unpackFloat32(Buffer.alloc(8), 3);
+  }, /blob size does not match dimensions/);
+});
+
+test('listEmbeddingRowsByModel returns joined rows for query workflow', async () => {
+  await withTempDir(async (dir) => {
+    const dbPath = path.join(dir, 'notesrag.sqlite');
+    const db = openDatabase(dbPath);
+    try {
+      initSchema(db);
+      persistIndexBatch(db, {
+        document: {
+          documentId: 'doc_list',
+          chars: 11,
+          bytes: 11,
+          normalizedText: 'hello world',
+          sourceDescriptor: { type: 'file', value: '/tmp/doc.txt' },
+        },
+        embeddedChunks: [
+          buildChunk({
+            chunkId: 'chunk_list',
+            documentId: 'doc_list',
+            index: 0,
+            startChar: 0,
+            endChar: 5,
+            text: 'hello',
+            embedding: [0.1, 0.2, 0.3],
+          }),
+        ],
+        model: 'nomic-embed-text',
+      });
+
+      const rows = listEmbeddingRowsByModel(db, { model: 'nomic-embed-text' });
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].chunk_id, 'chunk_list');
+      assert.equal(rows[0].document_id, 'doc_list');
+      assert.equal(rows[0].chunk_index, 0);
+      assert.equal(rows[0].source_type, 'file');
+      assert.equal(rows[0].source_value, '/tmp/doc.txt');
+      assert.equal(rows[0].dimensions, 3);
+      assert.ok(Buffer.isBuffer(rows[0].vector_blob));
     } finally {
       closeDatabase(db);
     }

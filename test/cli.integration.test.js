@@ -190,3 +190,86 @@ test('cli surfaces embedding failures as cli errors', async () => {
   assert.equal(out.value, '');
   assert.match(err.value, /^error: failed to reach Ollama/);
 });
+
+test('cli queries text input and prints markdown results', async () => {
+  await withTempDir(async (dir) => {
+    let captured;
+    const queryWorkflow = async (options) => {
+      captured = options;
+      return {
+        results: [
+          {
+            score: 0.987654,
+            chunkId: 'chunk_a',
+            documentId: 'doc_a',
+            startChar: 0,
+            endChar: 11,
+            text: 'hello world',
+            source: { type: 'file', value: '/tmp/hello.txt' },
+          },
+        ],
+      };
+    };
+
+    const { io, out, err } = ioFor({ cwd: dir, isTTY: true });
+    const code = await main(
+      ['query', '--text', 'hello', '--db-path', dbPathFor(dir), '--top-k', '3'],
+      io,
+      { queryWorkflow },
+    );
+
+    assert.equal(code, 0);
+    assert.equal(err.value, '');
+    assert.match(out.value, /^## Query Results/);
+    assert.match(out.value, /### 1\. score=0\.987654/);
+    assert.match(out.value, /- chunk_id: chunk_a/);
+    assert.match(out.value, /- document_id: doc_a/);
+    assert.match(out.value, /- source: file:\/tmp\/hello\.txt/);
+    assert.match(out.value, /hello world/);
+    assert.equal(captured.queryText, 'hello');
+    assert.equal(captured.embedModel, 'nomic-embed-text');
+    assert.equal(captured.dbPath, dbPathFor(dir));
+    assert.equal(captured.topK, 3);
+    assert.equal(captured.cwd, dir);
+  });
+});
+
+test('cli query supports stdin and no-result success path', async () => {
+  await withTempDir(async (dir) => {
+    const queryWorkflow = async (options) => {
+      assert.equal(options.queryText, 'hello stdin');
+      return { results: [] };
+    };
+    const { io, out, err } = ioFor({ stdinChunks: ['hello stdin'], isTTY: false, cwd: dir });
+    const code = await main(
+      ['query', '--stdin', '--db-path', dbPathFor(dir)],
+      io,
+      { queryWorkflow },
+    );
+
+    assert.equal(code, 0);
+    assert.equal(out.value, 'No relevant documents were found.\n');
+    assert.equal(err.value, '');
+  });
+});
+
+test('cli query emits debug logs when --debug is provided', async () => {
+  await withTempDir(async (dir) => {
+    const queryWorkflow = async (options) => {
+      await options.debugLog('query workflow stub');
+      return { results: [] };
+    };
+    const { io, out, err } = ioFor({ stdinChunks: ['hello stdin'], isTTY: false, cwd: dir });
+    const code = await main(
+      ['query', '--stdin', '--debug', '--db-path', dbPathFor(dir)],
+      io,
+      { queryWorkflow },
+    );
+
+    assert.equal(code, 0);
+    assert.equal(out.value, 'No relevant documents were found.\n');
+    assert.match(err.value, /debug: starting query input_mode=stdin embed_model=nomic-embed-text top_k=5/);
+    assert.match(err.value, /debug: loaded query source=stdin raw_chars=11/);
+    assert.match(err.value, /debug: query workflow stub/);
+  });
+});

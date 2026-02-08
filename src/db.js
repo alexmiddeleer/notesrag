@@ -1,6 +1,5 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const Database = require('better-sqlite3');
 const { CliError } = require('./errors');
 
 const SCHEMA_VERSION = '1';
@@ -18,6 +17,15 @@ function openDatabase(dbPath) {
 
   const dir = path.dirname(dbPath);
   fs.mkdirSync(dir, { recursive: true });
+
+  let Database;
+  try {
+    // Delay native module load so non-DB tests can run without sqlite bindings.
+    Database = require('better-sqlite3');
+  } catch (error) {
+    const message = error && error.message ? error.message : 'unknown error';
+    throw new CliError(`failed to load SQLite runtime: ${message}`);
+  }
 
   const db = new Database(dbPath);
   db.pragma('foreign_keys = ON');
@@ -110,6 +118,29 @@ function packFloat32(vector) {
     buffer.writeFloatLE(value, index * 4);
   });
   return buffer;
+}
+
+function unpackFloat32(buffer, dimensions) {
+  if (!Buffer.isBuffer(buffer)) {
+    throw new CliError('embedding blob must be a buffer');
+  }
+  if (!Number.isInteger(dimensions) || dimensions <= 0) {
+    throw new CliError('embedding dimensions must be a positive integer');
+  }
+  if (buffer.length !== dimensions * 4) {
+    throw new CliError('embedding blob size does not match dimensions');
+  }
+
+  const vector = new Array(dimensions);
+  for (let index = 0; index < dimensions; index += 1) {
+    const value = buffer.readFloatLE(index * 4);
+    if (!Number.isFinite(value)) {
+      throw new CliError('embedding blob contained non-finite values');
+    }
+    vector[index] = value;
+  }
+
+  return vector;
 }
 
 function assertDocument(document) {
@@ -328,12 +359,41 @@ function getDatabaseStats(db) {
   };
 }
 
+function listEmbeddingRowsByModel(db, { model }) {
+  assertDb(db);
+
+  if (typeof model !== 'string' || model.length === 0) {
+    throw new CliError('embedding model is required');
+  }
+
+  return db.prepare(`
+    SELECT
+      chunks.chunk_id AS chunk_id,
+      chunks.document_id AS document_id,
+      chunks.chunk_index AS chunk_index,
+      chunks.start_char AS start_char,
+      chunks.end_char AS end_char,
+      chunks.text AS text,
+      embeddings.vector_blob AS vector_blob,
+      embeddings.dimensions AS dimensions,
+      documents.source_type AS source_type,
+      documents.source_value AS source_value
+    FROM embeddings
+    INNER JOIN chunks ON chunks.chunk_id = embeddings.chunk_id
+    INNER JOIN documents ON documents.document_id = chunks.document_id
+    WHERE embeddings.model = ?
+    ORDER BY chunks.document_id, chunks.chunk_index
+  `).all(model);
+}
+
 module.exports = {
   openDatabase,
   initSchema,
   persistIndexBatch,
   closeDatabase,
   packFloat32,
+  unpackFloat32,
   assertDimensions,
   getDatabaseStats,
+  listEmbeddingRowsByModel,
 };
