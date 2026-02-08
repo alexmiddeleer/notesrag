@@ -17,6 +17,8 @@ async function resolvePayload(parsed, io) {
 }
 
 async function executeIndex(parsed, io, deps = {}) {
+  const { indexWorkflow: injectedWorkflow, ...workflowDeps } = deps;
+  const workflow = injectedWorkflow || indexWorkflow;
   const debug = createDebugLogger(io, parsed.debug);
   await debug(
     `starting index input_mode=${parsed.inputMode} embed_model=${parsed.embedModel}`,
@@ -26,7 +28,7 @@ async function executeIndex(parsed, io, deps = {}) {
   await debug(
     `loaded input source=${formatSource(payload.sourceDescriptor)} raw_chars=${payload.rawText.length}`,
   );
-  const outcome = await indexWorkflow(
+  const outcome = await workflow(
     {
       payload,
       embedModel: parsed.embedModel,
@@ -36,7 +38,7 @@ async function executeIndex(parsed, io, deps = {}) {
       debugLog: debug,
       ollamaHost: process.env.OLLAMA_HOST,
     },
-    deps,
+    workflowDeps,
   );
 
   await writeText(io.stdout, `${formatSuccess({
