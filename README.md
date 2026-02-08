@@ -8,6 +8,7 @@ This project is centered around building a toy rag that doesn’t include the fi
 
 * ollama
 * better-sqlite3
+* vitest
 * (more may exist, check package.json)
 
 ## mermaid for planned flow
